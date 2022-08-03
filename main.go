@@ -7,18 +7,19 @@ package main
 import (
 	_ "embed"
 	"fmt"
-	"github.com/m-manu/go-find-duplicates/bytesutil"
-	"github.com/m-manu/go-find-duplicates/entity"
-	"github.com/m-manu/go-find-duplicates/fmte"
-	"github.com/m-manu/go-find-duplicates/service"
-	"github.com/m-manu/go-find-duplicates/utils"
-	flag "github.com/spf13/pflag"
 	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/m-manu/go-find-duplicates/bytesutil"
+	"github.com/m-manu/go-find-duplicates/entity"
+	"github.com/m-manu/go-find-duplicates/fmte"
+	"github.com/m-manu/go-find-duplicates/service"
+	"github.com/m-manu/go-find-duplicates/utils"
+	flag "github.com/spf13/pflag"
 )
 
 // Exit codes for this program
@@ -45,6 +46,7 @@ var flags struct {
 	getMinSize       func() int64
 	getParallelism   func() int
 	isThorough       func() bool
+	getHashSize      func() int64
 }
 
 func setupExclusionsOpt() {
@@ -101,6 +103,13 @@ func setupMinSizeOpt() {
 	)
 	flags.getMinSize = func() int64 {
 		return int64(*fileSizeThresholdPtr) * bytesutil.KIBI
+	}
+}
+
+func setupHashSizeOpt() {
+	hashSizePtr := flag.Int64P("hashsize", "s", 16, "The size which used to hash")
+	flags.getHashSize = func() int64 {
+		return int64(*hashSizePtr) * bytesutil.KIBI
 	}
 }
 
@@ -198,6 +207,7 @@ func setupFlags() {
 	setupParallelismOpt()
 	setupThoroughOpt()
 	setupUsage()
+	setupHashSizeOpt()
 }
 
 func main() {
@@ -213,7 +223,7 @@ func main() {
 	reportFileName := createReportFileIfApplicable(runID, outputMode)
 	duplicates, duplicateTotalCount, savingsSize, allFiles, fdErr :=
 		service.FindDuplicates(directories, flags.getExcludedFiles(), flags.getMinSize(),
-			flags.getParallelism(), flags.isThorough())
+			flags.getParallelism(), flags.isThorough(), flags.getHashSize())
 	if fdErr != nil {
 		fmte.PrintfErr("error while finding duplicates: %+v\n", fdErr)
 		os.Exit(exitCodeErrorFindingDuplicates)
@@ -226,6 +236,7 @@ func main() {
 		}
 		return
 	}
+	duplicates = service.RecheckDuplicates(duplicates, flags.getParallelism())
 	fmte.Printf("Found %d duplicates. A total of %s can be saved by removing them.\n",
 		duplicateTotalCount, bytesutil.BinaryFormat(savingsSize))
 

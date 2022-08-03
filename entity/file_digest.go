@@ -2,6 +2,7 @@ package entity
 
 import (
 	"fmt"
+
 	"github.com/m-manu/go-find-duplicates/bytesutil"
 )
 

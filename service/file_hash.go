@@ -4,25 +4,25 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/m-manu/go-find-duplicates/bytesutil"
-	"github.com/m-manu/go-find-duplicates/entity"
-	"github.com/m-manu/go-find-duplicates/utils"
 	"hash"
 	"hash/crc32"
 	"os"
+
+	"github.com/m-manu/go-find-duplicates/entity"
+	"github.com/m-manu/go-find-duplicates/utils"
 )
 
-const (
-	thresholdFileSize = 16 * bytesutil.KIBI
-)
+// const (
+// 	thresholdFileSize = 16 * bytesutil.KIBI
+// )
 
 // GetDigest generates entity.FileDigest of the file provided
-func GetDigest(path string, isThorough bool) (entity.FileDigest, error) {
+func GetDigest(path string, isThorough bool, hashSize int64) (entity.FileDigest, error) {
 	info, statErr := os.Lstat(path)
 	if statErr != nil {
 		return entity.FileDigest{}, statErr
 	}
-	h, hashErr := fileHash(path, isThorough)
+	h, hashErr := fileHash(path, isThorough, hashSize)
 	if hashErr != nil {
 		return entity.FileDigest{}, hashErr
 	}
@@ -33,7 +33,7 @@ func GetDigest(path string, isThorough bool) (entity.FileDigest, error) {
 	}, nil
 }
 
-func fileHash(path string, isThorough bool) (string, error) {
+func fileHash(path string, isThorough bool, hashSize int64) (string, error) {
 	fileInfo, statErr := os.Lstat(path)
 	if statErr != nil {
 		return "", fmt.Errorf("couldn't stat: %+v", statErr)
@@ -46,12 +46,12 @@ func fileHash(path string, isThorough bool) (string, error) {
 	var fileReadErr error
 	if isThorough {
 		bytes, fileReadErr = os.ReadFile(path)
-	} else if fileInfo.Size() <= thresholdFileSize {
+	} else if fileInfo.Size() <= hashSize {
 		prefix = "f"
 		bytes, fileReadErr = os.ReadFile(path)
 	} else {
 		prefix = "s"
-		bytes, fileReadErr = readCrucialBytes(path, fileInfo.Size())
+		bytes, fileReadErr = readCrucialBytes(path, fileInfo.Size(), hashSize)
 	}
 	if fileReadErr != nil {
 		return "", fmt.Errorf("couldn't calculate hash: %+v", fileReadErr)
@@ -70,24 +70,24 @@ func fileHash(path string, isThorough bool) (string, error) {
 	return prefix + hex.EncodeToString(hashBytes), nil
 }
 
-func readCrucialBytes(filePath string, fileSize int64) ([]byte, error) {
+func readCrucialBytes(filePath string, fileSize int64, hashSize int64) ([]byte, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
-	firstBytes := make([]byte, thresholdFileSize/2)
+	firstBytes := make([]byte, hashSize/2)
 	_, fErr := file.ReadAt(firstBytes, 0)
 	if fErr != nil {
 		return nil, fmt.Errorf("couldn't read first few bytes (maybe file is corrupted?): %+v", fErr)
 	}
-	middleBytes := make([]byte, thresholdFileSize/4)
+	middleBytes := make([]byte, hashSize/4)
 	_, mErr := file.ReadAt(middleBytes, fileSize/2)
 	if mErr != nil {
 		return nil, fmt.Errorf("couldn't read middle bytes (maybe file is corrupted?): %+v", mErr)
 	}
-	lastBytes := make([]byte, thresholdFileSize/4)
-	_, lErr := file.ReadAt(lastBytes, fileSize-thresholdFileSize/4)
+	lastBytes := make([]byte, hashSize/4)
+	_, lErr := file.ReadAt(lastBytes, fileSize-hashSize/4)
 	if lErr != nil {
 		return nil, fmt.Errorf("couldn't read end bytes (maybe file is corrupted?): %+v", lErr)
 	}
